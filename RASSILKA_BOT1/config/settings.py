@@ -2,10 +2,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-# Базовая папка проекта
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Делаем python-dotenv необязательным
 try:
     from dotenv import load_dotenv
     load_dotenv(BASE_DIR / ".env")
@@ -25,7 +23,7 @@ class Settings:
     bot_token: str
     admin_id: int
     cooldown_seconds: int
-    db_path: str
+    db_path: Path
     log_level: str
 
 
@@ -33,7 +31,15 @@ def load_settings() -> Settings:
     bot_token = os.getenv("BOT_TOKEN", "").strip()
     admin_id = _to_int(os.getenv("ADMIN_ID"), 0)
     cooldown_seconds = _to_int(os.getenv("COOLDOWN_SECONDS"), 60)
-    db_path = os.getenv("DB_PATH", str(BASE_DIR / "data" / "bot.sqlite3")).strip()
+
+    db_path_env = os.getenv("DB_PATH", "").strip()
+    if db_path_env:
+        db_path = Path(db_path_env)
+        if not db_path.is_absolute():
+            db_path = BASE_DIR / db_path
+    else:
+        db_path = BASE_DIR / "data" / "bot.sqlite3"
+
     log_level = os.getenv("LOG_LEVEL", "INFO").strip() or "INFO"
 
     if not bot_token:
@@ -46,7 +52,7 @@ def load_settings() -> Settings:
         bot_token=bot_token,
         admin_id=admin_id,
         cooldown_seconds=cooldown_seconds,
-        db_path=db_path or str(BASE_DIR / "data" / "bot.sqlite3"),
+        db_path=db_path,
         log_level=log_level,
     )
 
