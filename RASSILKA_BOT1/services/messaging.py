@@ -214,7 +214,6 @@ async def send_admin_reply(bot: Bot, user_id: int, admin_message: Message) -> No
             logger.exception("Failed to update admin message status for user_id=%s", user_id)
 
 
-
 async def send_broadcast_copy(bot: Bot, user_id: int, admin_message: Message) -> None:
     await bot.copy_message(
         chat_id=user_id,

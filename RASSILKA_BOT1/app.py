@@ -9,8 +9,10 @@ from aiogram.exceptions import TelegramNetworkError
 from config.settings import settings
 from database.db import init_db
 from handlers.admin import admin_router
+from handlers.calendar import calendar_router
 from handlers.common import common_router
 from handlers.user import user_router
+from services.reminders import reminder_worker
 
 
 async def main():
@@ -29,10 +31,13 @@ async def main():
     dp = Dispatcher()
     dp.include_router(common_router)
     dp.include_router(admin_router)
+    dp.include_router(calendar_router)
     dp.include_router(user_router)
 
     while True:
+        reminder_task = None
         try:
+            reminder_task = asyncio.create_task(reminder_worker(bot))
             logging.info("Запуск polling...")
             await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
         except TelegramNetworkError as e:
@@ -43,6 +48,13 @@ async def main():
             logging.exception("Критическая ошибка запуска бота: %s", e)
             logging.info("Повторная попытка через 15 секунд...")
             await asyncio.sleep(15)
+        finally:
+            if reminder_task:
+                reminder_task.cancel()
+                try:
+                    await reminder_task
+                except asyncio.CancelledError:
+                    pass
 
 
 if __name__ == "__main__":

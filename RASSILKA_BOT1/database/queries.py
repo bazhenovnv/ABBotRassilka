@@ -179,6 +179,7 @@ def export_users_txt(path: Path) -> Path:
             )
     return path
 
+
 def get_last_incoming_message_preview(user_id: int) -> str | None:
     with get_connection() as conn:
         row = conn.execute(

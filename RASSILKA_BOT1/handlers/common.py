@@ -1,9 +1,9 @@
 from aiogram import F, Router
-from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.context import FSMContext
+from aiogram.types import CallbackQuery, Message
 
-from keyboards.admin import admin_menu
 from config.settings import settings
+from keyboards.admin import admin_menu
 
 
 common_router = Router()

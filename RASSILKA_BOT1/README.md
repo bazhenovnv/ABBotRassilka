@@ -1,12 +1,9 @@
-
-
 @PartnersTogether_bot
-
-# Kolyan Bot v2
+# Kolyan Bot v2 + АБ| Афиша
 
 Полностью переработанная версия Telegram-бота на `aiogram 3`.
 
-## Что уже сделано
+## Что уже есть
 
 - модульная архитектура
 - `BOT_TOKEN` вынесен в `.env`
@@ -18,35 +15,78 @@
 - ответ админа пользователю
 - рассылка активным пользователям
 - статистика
-- экспорт пользователей в `CSV` и `TXT`
-- логирование в консоль и `logs/bot.log`
+- экспорт пользователей в `TXT`
+- логирование в консоль
+- раздел **«АБ| Афиша»**
+- список ближайших событий
+- карточка события
+- подписки на напоминания: за 3 дня / за 1 день / за 1 час / отключить
+- раздел **«Мои напоминания»**
+- автоматическая отправка напоминаний фоновым воркером
+- сервисный слой `calendar_sync.py` для подключения к API календаря
+- deep-link из календаря в бота на конкретное событие
 
-## Важно
+## Новые таблицы SQLite
 
-Старый токен был засвечен в исходниках. Его нужно отозвать через BotFather и выпустить новый.
+- `calendar_events`
+- `user_event_reminders`
+- `reminder_send_log`
+
+## Новые файлы
+
+- `handlers/calendar.py`
+- `services/calendar_sync.py`
+- `services/reminders.py`
+- `database/calendar_queries.py`
+- `keyboards/calendar.py`
+
+## Доработанные файлы
+
+- `app.py`
+- `database/db.py`
+- `handlers/user.py`
+- `config/settings.py`
+- `keyboards/user.py`
+
+## Переменные окружения
+
+- `BOT_TOKEN`
+- `ADMIN_ID`
+- `COOLDOWN_SECONDS=60`
+- `DB_PATH=data/bot.sqlite3`
+- `LOG_LEVEL=INFO`
+- `CALENDAR_TIMEZONE=Europe/Moscow`
+- `REMINDER_CHECK_INTERVAL_SECONDS=60`
+- `CALENDAR_API_BASE_URL=http://localhost:4000/api`
+- `CALENDAR_API_TIMEOUT_SECONDS=15`
 
 ## Установка
 
 ```bash
 python -m venv .venv
+# Windows
 .venv\Scripts\activate
 pip install -r requirements.txt
-copy .env.example .env
+```
 
+Создайте `.env` и укажите переменные окружения.
 
+## Запуск
 
+```bash
+cd RASSILKA_BOT1
+python app.py
+```
 
-Запуск бота, такой:
+## Интеграция с календарём
 
-1. cd ABBotRassilka
-python -m venv venv
+Бот рассчитан на работу с backend календаря по API.
 
-Windows:
-в CMD:
-2. venv\Scripts\activate
+Что используется:
+- `GET /api/events?limit=30` — синхронизация ближайших событий
+- `GET /api/events/id/:id` — открытие конкретного события по deep-link из календаря
 
-3. pip install -r requirements.txt
-
-После этого запуск:
-
-4. python app.py
+Deep-link формат:
+```text
+https://t.me/<bot_username>?start=afisha_<uuid_события>
+```

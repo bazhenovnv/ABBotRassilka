@@ -5,17 +5,21 @@ import logging
 
 from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramBadRequest
-from aiogram.filters import Command, CommandStart
+from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from config.settings import settings
 from database.queries import get_user, upsert_user
 from keyboards.user import subscribe_menu, unsubscribe_menu
+from services.calendar_sync import calendar_sync_service
 from services.cooldown import get_remaining_seconds, start_cooldown
 from services.messaging import relay_user_message_to_admin
 from services.subscription import subscribe_user, unsubscribe_user
+from utils.calendar_format import format_event_card
 from utils.helpers import SUPPORTED_CONTENT_TYPES, detect_content_type
+from database.calendar_queries import get_event_by_external_id
+from keyboards.calendar import event_card_keyboard
 
 
 logger = logging.getLogger(__name__)
@@ -34,7 +38,8 @@ PRIVACY_POLICY_TEXT = (
     "<b>Для чего используются данные:</b>\n"
     "• для приёма и обработки ваших обращений;\n"
     "• для передачи вопроса администратору и отправки ответа;\n"
-    "• для управления подпиской, ограничениями на отправку сообщений и безопасностью работы бота.\n\n"
+    "• для управления подпиской, ограничениями на отправку сообщений и безопасностью работы бота;\n"
+    "• для хранения персональных настроек напоминаний по событиям проекта «АБ| Афиша».\n\n"
     "<b>Передача данных:</b>\n"
     "Ваши сообщения и вложения передаются администратору бота только в рамках обработки обращения. "
     "Данные не предназначены для публичного распространения через бот.\n\n"
@@ -56,11 +61,6 @@ def cooldown_text(seconds: int) -> str:
 
 
 async def update_cooldown_message(bot: Bot, chat_id: int, message_id: int, start_seconds: int) -> None:
-    """
-    Мягкий таймер:
-    - от start_seconds до 11 сек обновление раз в 5 секунд
-    - последние 10 секунд обновление каждую секунду
-    """
     remaining = start_seconds
 
     while remaining > 10:
@@ -109,8 +109,44 @@ async def update_cooldown_message(bot: Bot, chat_id: int, message_id: int, start
             break
 
 
+def _extract_afisha_event_id(command: CommandObject | None) -> str | None:
+    if not command or not command.args:
+        return None
+    payload = command.args.strip()
+    if not payload.startswith("afisha_"):
+        return None
+    event_id = payload.removeprefix("afisha_").strip()
+    return event_id or None
+
+
+async def _show_afisha_event_from_deeplink(message: Message, event_id: str) -> bool:
+    external_id = f"calendar_event:{event_id}"
+    event = get_event_by_external_id(external_id)
+
+    if not event:
+        try:
+            event = await asyncio.to_thread(calendar_sync_service.sync_event_by_public_id, event_id)
+        except Exception:
+            logger.exception("Failed to sync event for deep-link: event_id=%s", event_id)
+            await message.answer(
+                "Не удалось загрузить событие из «АБ| Афиша». Попробуйте открыть его позже или перейдите в раздел календаря вручную.",
+                reply_markup=unsubscribe_menu(),
+            )
+            return False
+
+    await message.answer(
+        "📅 <b>Открываю событие из «АБ| Афиша»</b>",
+        reply_markup=unsubscribe_menu(),
+    )
+    await message.answer(
+        format_event_card(event),
+        reply_markup=event_card_keyboard(int(event["id"]), 0),
+    )
+    return True
+
+
 @user_router.message(CommandStart())
-async def start_handler(message: Message) -> None:
+async def start_handler(message: Message, command: CommandObject | None = None) -> None:
     if message.from_user.id == settings.admin_id:
         from keyboards.admin import admin_menu
         await message.answer("⚙ <b>Админ-панель</b>", reply_markup=admin_menu())
@@ -131,6 +167,11 @@ async def start_handler(message: Message) -> None:
         )
         return
 
+    afisha_event_id = _extract_afisha_event_id(command)
+    if afisha_event_id:
+        await _show_afisha_event_from_deeplink(message, afisha_event_id)
+        return
+
     remaining = get_remaining_seconds(message.from_user.id)
     if remaining > 0:
         await message.answer(
@@ -144,11 +185,10 @@ async def start_handler(message: Message) -> None:
         "🤖 <b>Добро пожаловать в Ваш персональный помощник!</b>\n\n"
         "Вы можете задать вопрос в <b>«АБ Партнер»</b> "
         "по полученной информации от <b>«АБ | ВАЖНО»</b>.\n\n"
-        "✍️ Пишите вопрос сразу в строку сообщения.",
+        "Также доступен раздел <b>«АБ| Афиша»</b> с ближайшими событиями и напоминаниями.\n\n"
+        "✍️ Пишите вопрос сразу в строку сообщения или откройте раздел с афишей ниже.",
         reply_markup=unsubscribe_menu(),
     )
-
-
 
 
 @user_router.message(Command("privacy"))
@@ -161,6 +201,7 @@ async def privacy_callback(callback: CallbackQuery) -> None:
     await callback.message.answer(PRIVACY_POLICY_TEXT)
     await callback.answer()
 
+
 @user_router.callback_query(F.data == "user:subscribe")
 async def subscribe(callback: CallbackQuery) -> None:
     subscribe_user(
@@ -171,7 +212,7 @@ async def subscribe(callback: CallbackQuery) -> None:
     )
     await callback.message.edit_text("✅ Вы успешно подписались!")
     await callback.message.answer(
-        "Теперь можно писать вопрос прямо в нижнюю строку ввода.",
+        "Теперь можно писать вопрос прямо в нижнюю строку ввода и пользоваться разделом «АБ| Афиша».",
         reply_markup=unsubscribe_menu(),
     )
     await callback.answer()

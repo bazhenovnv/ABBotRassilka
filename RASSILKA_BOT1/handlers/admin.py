@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from html import escape
 
 from aiogram import Bot, F, Router
 from aiogram.filters import Command
@@ -14,7 +15,6 @@ from services.broadcast import broadcast_message
 from services.messaging import send_admin_reply
 from states.admin_states import AdminStates
 from utils.helpers import SUPPORTED_CONTENT_TYPES, detect_content_type
-from html import escape
 
 
 logger = logging.getLogger(__name__)
